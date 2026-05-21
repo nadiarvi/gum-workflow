@@ -22,8 +22,9 @@ from .db_utils import (
     search_propositions_bm25,
     get_recent_propositions,
     get_recent_observations,
+    get_recent_workflows,
 )
-from .models import Observation, Proposition, init_db
+from .models import Observation, Proposition, Workflow, init_db
 from .observers import Observer
 from .schemas import (
     PropositionItem,
@@ -31,9 +32,10 @@ from .schemas import (
     RelationSchema,
     Update,
     get_schema,
-    AuditSchema
+    AuditSchema,
+    WorkflowSchema,
 )
-from gum.prompts.gum import AUDIT_PROMPT, PROPOSE_PROMPT, REVISE_PROMPT, SIMILAR_PROMPT
+from gum.prompts.gum import AUDIT_PROMPT, PROPOSE_PROMPT, REVISE_PROMPT, SIMILAR_PROMPT, WORKFLOW_PROMPT
 from .batcher import ObservationBatcher
 
 class gum:
@@ -66,6 +68,7 @@ class gum:
         similar_prompt: str | None = None,
         revise_prompt: str | None = None,
         audit_prompt: str | None = None,
+        workflow_prompt: str | None = None,
         data_directory: str = "~/.cache/gum",
         db_name: str = "gum.db",
         verbosity: int = logging.INFO,
@@ -74,6 +77,7 @@ class gum:
         api_key: str | None = None,
         min_batch_size: int = 5,
         max_batch_size: int = 50,
+        enable_batcher: bool = True,
     ):
         # basic paths
         data_directory = os.path.expanduser(data_directory)
@@ -102,6 +106,7 @@ class gum:
         self.similar_prompt = similar_prompt or SIMILAR_PROMPT
         self.revise_prompt = revise_prompt or REVISE_PROMPT
         self.audit_prompt = audit_prompt or AUDIT_PROMPT
+        self.workflow_prompt = workflow_prompt or WORKFLOW_PROMPT
 
         self.client = AsyncOpenAI(
             base_url=api_base or os.getenv("GUM_LM_API_BASE"), 
@@ -113,12 +118,13 @@ class gum:
         self._db_name        = db_name
         self._data_directory = data_directory
 
-        # Initialize batcher if enabled
-        self.batcher = ObservationBatcher(
-            data_directory=data_directory,
-            min_batch_size=min_batch_size,
-            max_batch_size=max_batch_size
-        )
+        self.batcher = None
+        if enable_batcher:
+            self.batcher = ObservationBatcher(
+                data_directory=data_directory,
+                min_batch_size=min_batch_size,
+                max_batch_size=max_batch_size
+            )
 
         self._loop_task: asyncio.Task | None = None
         self._batch_task: asyncio.Task | None = None
@@ -131,7 +137,7 @@ class gum:
             self._loop_task = asyncio.create_task(self._update_loop())
             
         # Start batch processing if enabled
-        if self._batch_task is None:
+        if self.batcher and self._batch_task is None:
             self._batch_task = asyncio.create_task(self._batch_processing_loop())
 
     async def stop_update_loop(self):
@@ -269,6 +275,7 @@ class gum:
                 await self._handle_identical(session, identical, observations)
                 await self._handle_similar(session, similar, observations)
                 await self._handle_different(session, different, observations)
+                await self._generate_workflows(session, combined_update, observations)
                 
                 # Observations are already removed from queue by pop_batch()
                 self.logger.info(f"Completed processing batch of {len(batched_observations)} observations")
@@ -306,6 +313,44 @@ class gum:
         )
 
         return json.loads(rsp.choices[0].message.content)["propositions"]
+
+    async def _construct_workflows(self, update: Update) -> list[dict]:
+        """Generate workflow patterns from an update."""
+        prompt = (
+            self.workflow_prompt.replace("{user_name}", self.user_name)
+            .replace("{inputs}", update.content)
+        )
+
+        schema = WorkflowSchema.model_json_schema()
+        rsp = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            response_format=get_schema(schema),
+        )
+
+        return json.loads(rsp.choices[0].message.content)["workflows"]
+
+    async def _generate_workflows(
+        self,
+        session: AsyncSession,
+        update: Update,
+        observations: list[Observation],
+    ) -> None:
+        """Persist workflow patterns inferred from a processed observation batch."""
+        workflow_items = await self._construct_workflows(update)
+        for item in workflow_items:
+            workflow = Workflow(
+                name=item["workflow_name"],
+                input=item["input"],
+                output=item["output"],
+                steps=json.dumps(item["steps"]),
+                reasoning=item["reasoning"],
+                confidence=item.get("confidence"),
+                observations=set(observations),
+            )
+            session.add(workflow)
+
+        await session.flush()
 
     async def _build_relation_prompt(self, all_props) -> str:
         """Build a prompt for analyzing relationships between propositions.
@@ -575,6 +620,10 @@ class gum:
         self.logger.info(f"Processing update from {observer.name}")
 
         # add to batch
+        if not self.batcher:
+            self.logger.warning("No observation batcher is configured; dropping update")
+            return
+
         observation_id = self.batcher.push(
             observer_name=observer.name,
             content=update.content,
@@ -685,4 +734,22 @@ class gum:
                 limit=limit,
                 start_time=start_time,
                 end_time=end_time,
+            )
+
+    async def recent_workflows(
+        self,
+        *,
+        limit: int = 10,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+        include_observations: bool = False,
+    ) -> list[Workflow]:
+        """Return the most recent workflows ordered by created_at descending."""
+        async with self._session() as session:
+            return await get_recent_workflows(
+                session,
+                limit=limit,
+                start_time=start_time,
+                end_time=end_time,
+                include_observations=include_observations,
             )

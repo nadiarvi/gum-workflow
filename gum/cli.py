@@ -5,6 +5,7 @@ import os
 import argparse
 import asyncio
 import shutil  
+import json
 from gum import gum
 from gum.observers import Screen
 
@@ -29,6 +30,11 @@ def parse_args():
         '--recent', '-r',
         action='store_true',
         help='List the most recent propositions instead of running BM25 search',
+    )
+    parser.add_argument(
+        '--workflows', '-w',
+        action='store_true',
+        help='List the most recent observed workflows',
     )
     
     parser.add_argument('--limit', '-l', type=int, help='Limit the number of results', default=10)
@@ -66,13 +72,35 @@ async def main():
     min_batch_size = args.min_batch_size or int(os.getenv('MIN_BATCH_SIZE', '5'))
     max_batch_size = args.max_batch_size or int(os.getenv('MAX_BATCH_SIZE', '15'))
 
-    # you need one of: user_name for listening mode, --query, or --recent
-    if user_name is None and args.query is None and not getattr(args, 'recent', False):
-        print("Please provide a user name (-u), a query (-q), or use --recent to list latest propositions")
+    # you need one of: user_name for listening mode, --query, --recent, or --workflows
+    if user_name is None and args.query is None and not getattr(args, 'recent', False) and not getattr(args, 'workflows', False):
+        print("Please provide a user name (-u), a query (-q), use --recent, or use --workflows")
         return
     
-    if getattr(args, 'recent', False):
-        gum_instance = gum(user_name or os.getenv('USER_NAME') or 'default', model)
+    if getattr(args, 'workflows', False):
+        gum_instance = gum(user_name or os.getenv('USER_NAME') or 'default', model, enable_batcher=False)
+        await gum_instance.connect_db()
+        workflows = await gum_instance.recent_workflows(limit=args.limit)
+        print(f"\nRecent {len(workflows)} workflows:")
+        for w in workflows:
+            print(f"\nWorkflow: {w.name}")
+            print(f"Input: {w.input}")
+            print(f"Output: {w.output}")
+            steps = json.loads(w.steps)
+            if steps:
+                print("Steps:")
+                for idx, step in enumerate(steps, 1):
+                    confidence = step.get("confidence")
+                    suffix = f" (confidence: {confidence})" if confidence is not None else ""
+                    print(f"{idx}. {step['step']}{suffix}")
+            if w.reasoning:
+                print(f"Reasoning: {w.reasoning}")
+            if w.confidence is not None:
+                print(f"Confidence: {w.confidence:.2f}")
+            print(f"Created At: {w.created_at}")
+            print("-" * 80)
+    elif getattr(args, 'recent', False):
+        gum_instance = gum(user_name or os.getenv('USER_NAME') or 'default', model, enable_batcher=False)
         await gum_instance.connect_db()
         props = await gum_instance.recent(limit=args.limit)
         print(f"\nRecent {len(props)} propositions:")
@@ -85,7 +113,7 @@ async def main():
             print(f"Created At: {p.created_at}")
             print("-" * 80)
     elif args.query is not None:
-        gum_instance = gum(user_name, model)
+        gum_instance = gum(user_name, model, enable_batcher=False)
         await gum_instance.connect_db()
         result = await gum_instance.query(args.query, limit=args.limit)
         

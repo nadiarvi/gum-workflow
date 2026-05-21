@@ -37,6 +37,36 @@ class PropositionSchema(BaseModel):
     )
     model_config = ConfigDict(extra="forbid")
 
+class WorkflowStepItem(BaseModel):
+    step: str = Field(..., description="One observed step in the workflow")
+    confidence: Optional[int] = Field(
+        ...,
+        description="Confidence score from 1 (low) to 10 (high)"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+class WorkflowItem(BaseModel):
+    workflow_name: str = Field(..., description="Short name for the observed workflow")
+    input: str = Field(..., description="Inputs or starting materials used in the workflow")
+    output: str = Field(..., description="Outputs or results produced by the workflow")
+    steps: List[WorkflowStepItem] = Field(..., description="Ordered workflow steps")
+    reasoning: str = Field(..., description="Evidence supporting this workflow pattern")
+    confidence: Optional[int] = Field(
+        ...,
+        description="Overall confidence score from 1 (low) to 10 (high)"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+class WorkflowSchema(BaseModel):
+    workflows: List[WorkflowItem] = Field(
+        ...,
+        description="Observed workflow patterns"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
 class Update(BaseModel):
     content: str = Field(..., description="The content of the update")
     content_type: Literal["input_text", "input_image"] = Field(..., description="The type of the update")

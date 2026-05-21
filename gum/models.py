@@ -54,6 +54,23 @@ observation_proposition = Table(
     ),
 )
 
+observation_workflow = Table(
+    "observation_workflow",
+    Base.metadata,
+    Column(
+        "observation_id",
+        Integer,
+        ForeignKey("observations.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "workflow_id",
+        Integer,
+        ForeignKey("workflows.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
 
 
 
@@ -92,6 +109,15 @@ class Observation(Base):
     propositions: Mapped[set["Proposition"]] = relationship(
         "Proposition",
         secondary=observation_proposition,
+        back_populates="observations",
+        collection_class=set,
+        passive_deletes=True,
+        lazy="selectin",
+    )
+
+    workflows: Mapped[set["Workflow"]] = relationship(
+        "Workflow",
+        secondary=observation_workflow,
         back_populates="observations",
         collection_class=set,
         passive_deletes=True,
@@ -166,6 +192,42 @@ class Proposition(Base):
         """
         preview = (self.text[:27] + "…") if len(self.text) > 30 else self.text
         return f"<Proposition(id={self.id}, text={preview})>"
+
+
+class Workflow(Base):
+    """Represents an inferred workflow pattern from observed user activity."""
+    __tablename__ = "workflows"
+
+    id:         Mapped[int]           = mapped_column(primary_key=True)
+    name:       Mapped[str]           = mapped_column(Text, nullable=False)
+    input:      Mapped[str]           = mapped_column(Text, nullable=False)
+    output:     Mapped[str]           = mapped_column(Text, nullable=False)
+    steps:      Mapped[str]           = mapped_column(Text, nullable=False)
+    reasoning:  Mapped[str]           = mapped_column(Text, nullable=False)
+    confidence: Mapped[Optional[int]]
+
+    created_at: Mapped[str]           = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[str]           = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    observations: Mapped[set[Observation]] = relationship(
+        "Observation",
+        secondary=observation_workflow,
+        back_populates="workflows",
+        collection_class=set,
+        passive_deletes=True,
+        lazy="selectin",
+    )
+
+    def __repr__(self) -> str:
+        preview = (self.name[:27] + "…") if len(self.name) > 30 else self.name
+        return f"<Workflow(id={self.id}, name={preview})>"
 
 
 FTS_TOKENIZER = "porter ascii"

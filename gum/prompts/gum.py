@@ -105,6 +105,57 @@ Return your results in this exact JSON format:
   ]
 }"""
 
+WORKFLOW_PROMPT = """You are a helpful assistant tasked with analyzing user behavior based on transcribed activity.
+
+# Analysis
+
+Using a transcription of {user_name}'s activity, identify concrete workflow patterns: activities where {user_name} appears to transform some input into an output through ordered steps.
+
+Be conservative. Only extract a workflow when the transcript gives enough evidence to infer the activity, input, output, and at least one step. If the transcript is too sparse or only shows passive viewing, return an empty workflows list.
+
+Use specific named entities from the transcript wherever possible, including applications, files, websites, documents, tools, people, and organizations. Avoid generic labels when exact names are visible.
+
+For each workflow, provide:
+
+- A short workflow name describing what activity is done.
+- The input or starting material.
+- The output or intended result.
+- Ordered steps, each with a confidence score from 1 to 10.
+- A concise reasoning statement grounded in transcript evidence.
+- An overall confidence score from 1 to 10.
+
+High confidence requires direct evidence of meaningful engagement. Lower confidence is appropriate when steps are inferred from partial screen context.
+
+# Input
+
+Below is a set of transcribed actions and interactions that {user_name} has performed:
+
+## User Activity Transcriptions
+
+{inputs}
+
+# Output
+
+Return only JSON in the following format:
+
+{
+  "workflows": [
+    {
+      "workflow_name": "<short activity name>",
+      "input": "<input or starting material>",
+      "output": "<output or intended result>",
+      "steps": [
+        {
+          "step": "<observed or inferred step>",
+          "confidence": <integer 1-10>
+        }
+      ],
+      "reasoning": "<evidence from the transcript, including named entities where applicable>",
+      "confidence": <integer 1-10>
+    }
+  ]
+}"""
+
 REVISE_PROMPT = """You are an expert analyst. A cluster of similar propositions are shown below, followed by their supporting observations.
 
 Your job is to produce a **final set** of propositions that is clear, non-redundant, and captures everything about the user, {user_name}.
