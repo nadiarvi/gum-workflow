@@ -6,8 +6,38 @@ import argparse
 import asyncio
 import shutil  
 import json
+import sys
 from gum import gum
 from gum.observers import Screen
+
+ACCENT = "\033[96m"
+ACCENT_BOLD = "\033[1;96m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
+RESET = "\033[0m"
+
+
+def _supports_color() -> bool:
+    return sys.stdout.isatty() and os.getenv("NO_COLOR") is None
+
+
+def _style(text: str, *codes: str) -> str:
+    if not _supports_color():
+        return text
+    return "".join(codes) + text + RESET
+
+
+def _result_header(title: str) -> str:
+    rule = "=" * 80
+    return f"\n{_style(rule, ACCENT_BOLD)}\n{_style(title, ACCENT_BOLD)}\n{_style(rule, ACCENT_BOLD)}"
+
+
+def _result_separator() -> str:
+    return _style("-" * 80, DIM)
+
+
+def _label(text: str) -> str:
+    return _style(text, BOLD)
 
 class QueryAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -83,52 +113,52 @@ async def main():
         gum_instance = gum(user_name or os.getenv('USER_NAME') or 'default', model, enable_batcher=False)
         await gum_instance.connect_db()
         workflows = await gum_instance.recent_workflows(limit=args.limit)
-        print(f"\nRecent {len(workflows)} workflows:")
+        print(_result_header(f"GUM WORKFLOWS ({len(workflows)} results)"))
         for w in workflows:
-            print(f"\nWorkflow: {w.name}")
-            print(f"Input: {w.input}")
-            print(f"Output: {w.output}")
+            print(f"\n{_label('Workflow')}: {_style(w.name, ACCENT)}")
+            print(f"{_label('Input')}: {w.input}")
+            print(f"{_label('Output')}: {w.output}")
             steps = json.loads(w.steps)
             if steps:
-                print("Steps:")
+                print(f"{_label('Steps')}:")
                 for idx, step in enumerate(steps, 1):
                     confidence = step.get("confidence")
                     suffix = f" (confidence: {confidence})" if confidence is not None else ""
                     print(f"{idx}. {step['step']}{suffix}")
             if w.reasoning:
-                print(f"Reasoning: {w.reasoning}")
+                print(f"{_label('Reasoning')}: {w.reasoning}")
             if w.confidence is not None:
-                print(f"Confidence: {w.confidence:.2f}")
-            print(f"Created At: {w.created_at}")
-            print("-" * 80)
+                print(f"{_label('Confidence')}: {w.confidence:.2f}")
+            print(f"{_label('Created At')}: {w.created_at}")
+            print(_result_separator())
     elif getattr(args, 'recent', False):
         gum_instance = gum(user_name or os.getenv('USER_NAME') or 'default', model, enable_batcher=False)
         await gum_instance.connect_db()
         props = await gum_instance.recent(limit=args.limit)
-        print(f"\nRecent {len(props)} propositions:")
+        print(_result_header(f"GUM PROPOSITIONS ({len(props)} recent results)"))
         for p in props:
-            print(f"\nProposition: {p.text}")
+            print(f"\n{_label('Proposition')}: {_style(p.text, ACCENT)}")
             if p.reasoning:
-                print(f"Reasoning: {p.reasoning}")
+                print(f"{_label('Reasoning')}: {p.reasoning}")
             if p.confidence is not None:
-                print(f"Confidence: {p.confidence:.2f}")
-            print(f"Created At: {p.created_at}")
-            print("-" * 80)
+                print(f"{_label('Confidence')}: {p.confidence:.2f}")
+            print(f"{_label('Created At')}: {p.created_at}")
+            print(_result_separator())
     elif args.query is not None:
         gum_instance = gum(user_name, model, enable_batcher=False)
         await gum_instance.connect_db()
         result = await gum_instance.query(args.query, limit=args.limit)
         
         # confidences / propositions / number of items returned
-        print(f"\nFound {len(result)} results:")
+        print(_result_header(f"GUM QUERY RESULTS ({len(result)} matches)"))
         for prop, score in result:
-            print(f"\nProposition: {prop.text}")
+            print(f"\n{_label('Proposition')}: {_style(prop.text, ACCENT)}")
             if prop.reasoning:
-                print(f"Reasoning: {prop.reasoning}")
+                print(f"{_label('Reasoning')}: {prop.reasoning}")
             if prop.confidence is not None:
-                print(f"Confidence: {prop.confidence:.2f}")
-            print(f"Relevance Score: {score:.2f}")
-            print("-" * 80)
+                print(f"{_label('Confidence')}: {prop.confidence:.2f}")
+            print(f"{_label('Relevance Score')}: {score:.2f}")
+            print(_result_separator())
     else:
         print(f"Listening to {user_name} with model {model} and screen model {screen_model}")
             
