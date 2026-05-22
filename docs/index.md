@@ -52,14 +52,20 @@ You can start a GUM server directly from the command line.
         > # Launch model
         > CUDA_VISIBLE_DEVICES=0 python -m sglang.launch_server ....
 
-        > # name of the model you launched
+        > # name of the core reasoning model you launched
         > export MODEL_NAME="model-org/model-name"
+
+        > # screenshot vision model
+        > export SCREEN_MODEL_NAME="gemini-3-pro-preview"
 
         > # your full name
         > export USER_NAME="Full Name"
 
-        > # point this to the GUM multimodal model
+        > # point this to the GUM reasoning model
         > export GUM_LM_API_BASE="base-url"
+
+        > # point screen understanding at a vision endpoint (defaults to Gemini)
+        > export SCREEN_LM_API_BASE="https://generativelanguage.googleapis.com/v1beta/openai/"
 
         > # (optionally) set an API key
         > export GUM_LM_API_KEY="None"
@@ -69,10 +75,14 @@ You can start a GUM server directly from the command line.
         Alternatively, we recommend using [SkyPilot](https://docs.skypilot.co/en/latest/docs/index.html) to serve and run your own models on the cloud. You can use the following [skypilot.yaml](https://github.com/GeneralUserModels/gum/blob/main/skypilot-tmp.yaml) file in the repo. You'll need to replace the HuggingFace token (HF_TOKEN) with your own. By default, we use Qwen 2.5 VL 32B (AWQ quanitized). A single H100 (80GB) should give you good enough throughput.
 
     === "OpenAI"
-        You can authenticate by setting the `OPENAI_API_KEY` and `USER_NAME` env variables.
+        You can authenticate by setting `OPENAI_API_KEY` for GUM reasoning,
+        `GEMINI_API_KEY` for screenshot understanding, and `USER_NAME`.
 
         ```bash
         > export OPENAI_API_KEY="your-api-key-here"
+        > export GEMINI_API_KEY="your-gemini-api-key-here"
+        > export MODEL_NAME="gpt-4.1-mini"
+        > export SCREEN_MODEL_NAME="gemini-3-pro-preview"
         > export USER_NAME="Full Name"
         ```
 

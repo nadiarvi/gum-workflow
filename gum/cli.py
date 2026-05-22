@@ -38,7 +38,8 @@ def parse_args():
     )
     
     parser.add_argument('--limit', '-l', type=int, help='Limit the number of results', default=10)
-    parser.add_argument('--model', '-m', type=str, help='Model to use')
+    parser.add_argument('--model', '-m', type=str, help='Core GUM reasoning model to use')
+    parser.add_argument('--screen-model', type=str, help='Screenshot vision model to use')
     parser.add_argument('--reset-cache', action='store_true', help='Reset the GUM cache and exit')  # Add this line
     
     # Batching configuration arguments
@@ -65,7 +66,8 @@ async def main():
             print(f"Cache directory does not exist: {cache_dir}")
         return
 
-    model = args.model or os.getenv('MODEL_NAME') or 'gpt-4o-mini'
+    model = args.model or os.getenv('MODEL_NAME') or 'gpt-4.1-mini'
+    screen_model = args.screen_model or os.getenv('SCREEN_MODEL_NAME') or 'gemini-3-pro-preview'
     user_name = args.user_name or os.getenv('USER_NAME')
 
     # Batching configuration - follow same pattern as other args    
@@ -128,12 +130,12 @@ async def main():
             print(f"Relevance Score: {score:.2f}")
             print("-" * 80)
     else:
-        print(f"Listening to {user_name} with model {model}")
+        print(f"Listening to {user_name} with model {model} and screen model {screen_model}")
             
         async with gum(
             user_name, 
             model, 
-            Screen(model),
+            Screen(screen_model),
             min_batch_size=min_batch_size,
             max_batch_size=max_batch_size
         ) as gum_instance:

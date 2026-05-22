@@ -18,7 +18,9 @@ setup(
         "python-dotenv>=1.0.0",
         "scikit-learn",
         "aiosqlite",
-        "greenlet"
+        "greenlet",
+        "aiohttp",
+        "ics",
     ],
     entry_points={
         'console_scripts': [

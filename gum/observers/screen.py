@@ -31,6 +31,9 @@ from openai import AsyncOpenAI
 # — Local —
 from gum.prompts.screen import TRANSCRIPTION_PROMPT, SUMMARY_PROMPT
 
+DEFAULT_SCREEN_MODEL = "gemini-3-pro-preview"
+DEFAULT_SCREEN_API_BASE = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
 ###############################################################################
 # Window‑geometry helpers                                                     #
 ###############################################################################
@@ -132,7 +135,7 @@ class Screen(Observer):
             Defaults to None.
         summary_prompt (Optional[str], optional): Custom prompt for summarizing screenshots.
             Defaults to None.
-        model_name (str, optional): GPT model to use for vision analysis. Defaults to "gpt-4o-mini".
+        model_name (str, optional): Vision model to use for screen analysis. Defaults to "gemini-3-pro-preview".
         history_k (int, optional): Number of recent screenshots to keep in history. Defaults to 10.
         debug (bool, optional): Enable debug logging. Defaults to False.
 
@@ -149,7 +152,7 @@ class Screen(Observer):
     # ─────────────────────────────── construction
     def __init__(
         self,
-        model_name: str = "gpt-4o-mini",
+        model_name: str = DEFAULT_SCREEN_MODEL,
         screenshots_dir: str = "~/.cache/gum/screenshots",
         skip_when_visible: Optional[str | list[str]] = None,
         transcription_prompt: Optional[str] = None,
@@ -169,7 +172,7 @@ class Screen(Observer):
                 Defaults to None.
             summary_prompt (Optional[str], optional): Custom prompt for summarizing screenshots.
                 Defaults to None.
-            model_name (str, optional): GPT model to use for vision analysis. Defaults to "gpt-4o-mini".
+            model_name (str, optional): Vision model to use for screen analysis. Defaults to "gemini-3-pro-preview".
             history_k (int, optional): Number of recent screenshots to keep in history. Defaults to 10.
             debug (bool, optional): Enable debug logging. Defaults to False.
         """
@@ -192,11 +195,11 @@ class Screen(Observer):
         self._pending_event: Optional[dict] = None
         self._debounce_handle: Optional[asyncio.TimerHandle] = None
         self.client = AsyncOpenAI(
-            # try the class, then the env for screen, then the env for gum
-            base_url=api_base or os.getenv("SCREEN_LM_API_BASE") or os.getenv("GUM_LM_API_BASE"), 
+            # Screen understanding uses Gemini's OpenAI-compatible endpoint by default.
+            base_url=api_base or os.getenv("SCREEN_LM_API_BASE") or DEFAULT_SCREEN_API_BASE, 
 
-            # try the class, then the env for screen, then the env for GUM, then none
-            api_key=api_key or os.getenv("SCREEN_LM_API_KEY") or os.getenv("GUM_LM_API_KEY") or os.getenv("OPENAI_API_KEY") or "None"
+            # Prefer screen/Gemini credentials, then fall back to the legacy GUM/OpenAI vars.
+            api_key=api_key or os.getenv("SCREEN_LM_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GUM_LM_API_KEY") or os.getenv("OPENAI_API_KEY") or "None"
         )
 
         # call parent
