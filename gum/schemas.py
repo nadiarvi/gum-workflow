@@ -67,6 +67,31 @@ class WorkflowSchema(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+class MergedWorkflowItem(BaseModel):
+    workflow_name: str = Field(..., description="Short name for the merged workflow")
+    input: str = Field(..., description="Inputs or starting materials used in the workflow")
+    output: str = Field(..., description="Outputs or results produced by the workflow")
+    steps: List[WorkflowStepItem] = Field(..., description="Ordered workflow steps")
+    reasoning: str = Field(..., description="Evidence summary grounded in source observations")
+    confidence: Optional[int] = Field(
+        ...,
+        description="Overall confidence score from 1 (low) to 10 (high)"
+    )
+    source_refs: List[str] = Field(
+        ...,
+        description="Source workflow references used to produce this merged workflow"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+class MergedWorkflowSchema(BaseModel):
+    workflows: List[MergedWorkflowItem] = Field(
+        ...,
+        description="Canonical merged workflow patterns"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
 class Update(BaseModel):
     content: str = Field(..., description="The content of the update")
     content_type: Literal["input_text", "input_image"] = Field(..., description="The type of the update")

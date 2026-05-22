@@ -37,6 +37,7 @@ from .schemas import (
 )
 from gum.prompts.gum import AUDIT_PROMPT, PROPOSE_PROMPT, REVISE_PROMPT, SIMILAR_PROMPT, WORKFLOW_PROMPT
 from .batcher import ObservationBatcher
+from .workflow_merger import WorkflowMerger
 
 class gum:
     """A class for managing general user models.
@@ -78,6 +79,9 @@ class gum:
         min_batch_size: int = 5,
         max_batch_size: int = 50,
         enable_batcher: bool = True,
+        enable_workflow_merging: bool = True,
+        workflow_merge_candidate_limit: int = 25,
+        workflow_merge_similarity_threshold: float = 0.2,
     ):
         # basic paths
         data_directory = os.path.expanduser(data_directory)
@@ -88,6 +92,7 @@ class gum:
         self.observers: list[Observer] = list(observers)
         self.model = model
         self.audit_enabled = audit_enabled
+        self.enable_workflow_merging = enable_workflow_merging
 
         # batching configuration
         self.min_batch_size = min_batch_size
@@ -111,6 +116,14 @@ class gum:
         self.client = AsyncOpenAI(
             base_url=api_base or os.getenv("GUM_LM_API_BASE"), 
             api_key=api_key or os.getenv("GUM_LM_API_KEY") or os.getenv("OPENAI_API_KEY") or "None"
+        )
+        self.workflow_merger = WorkflowMerger(
+            user_name=user_name,
+            model=model,
+            client=self.client,
+            logger=self.logger,
+            candidate_limit=workflow_merge_candidate_limit,
+            similarity_threshold=workflow_merge_similarity_threshold,
         )
 
         self.engine = None
@@ -338,6 +351,26 @@ class gum:
     ) -> None:
         """Persist workflow patterns inferred from a processed observation batch."""
         workflow_items = await self._construct_workflows(update)
+        if self.enable_workflow_merging:
+            try:
+                await self.workflow_merger.merge_new_workflows(
+                    session,
+                    workflow_items,
+                    observations,
+                )
+                return
+            except Exception as e:
+                self.logger.error(f"Workflow merge failed; storing raw workflows: {e}")
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
+
+        await self._store_workflows(session, workflow_items, set(observations))
+
+    async def _store_workflows(
+        self,
+        session: AsyncSession,
+        workflow_items: list[dict],
+        observations: set[Observation],
+    ) -> None:
         for item in workflow_items:
             workflow = Workflow(
                 name=item["workflow_name"],
@@ -351,6 +384,14 @@ class gum:
             session.add(workflow)
 
         await session.flush()
+
+    async def merge_workflows(self, *, limit: int = 100) -> int:
+        """Merge recent fine-grained workflows into canonical workflow records."""
+        async with self._session() as session:
+            return await self.workflow_merger.merge_existing_workflows(
+                session,
+                limit=limit,
+            )
 
     async def _build_relation_prompt(self, all_props) -> str:
         """Build a prompt for analyzing relationships between propositions.

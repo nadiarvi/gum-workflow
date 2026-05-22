@@ -66,6 +66,11 @@ def parse_args():
         action='store_true',
         help='List the most recent observed workflows',
     )
+    parser.add_argument(
+        '--merge-workflows',
+        action='store_true',
+        help='Merge recent fine-grained workflows into canonical workflows',
+    )
     
     parser.add_argument('--limit', '-l', type=int, help='Limit the number of results', default=10)
     parser.add_argument('--model', '-m', type=str, help='Core GUM reasoning model to use')
@@ -104,12 +109,24 @@ async def main():
     min_batch_size = args.min_batch_size or int(os.getenv('MIN_BATCH_SIZE', '5'))
     max_batch_size = args.max_batch_size or int(os.getenv('MAX_BATCH_SIZE', '15'))
 
-    # you need one of: user_name for listening mode, --query, --recent, or --workflows
-    if user_name is None and args.query is None and not getattr(args, 'recent', False) and not getattr(args, 'workflows', False):
-        print("Please provide a user name (-u), a query (-q), use --recent, or use --workflows")
+    # you need one of: user_name for listening mode, --query, --recent, --workflows, or --merge-workflows
+    if (
+        user_name is None
+        and args.query is None
+        and not getattr(args, 'recent', False)
+        and not getattr(args, 'workflows', False)
+        and not getattr(args, 'merge_workflows', False)
+    ):
+        print("Please provide a user name (-u), a query (-q), use --recent, use --workflows, or use --merge-workflows")
         return
     
-    if getattr(args, 'workflows', False):
+    if getattr(args, 'merge_workflows', False):
+        gum_instance = gum(user_name or os.getenv('USER_NAME') or 'default', model, enable_batcher=False)
+        await gum_instance.connect_db()
+        count = await gum_instance.merge_workflows(limit=args.limit)
+        print(_result_header("GUM WORKFLOW MERGE"))
+        print(f"{_label('Canonical Workflows Created')}: {count}")
+    elif getattr(args, 'workflows', False):
         gum_instance = gum(user_name or os.getenv('USER_NAME') or 'default', model, enable_batcher=False)
         await gum_instance.connect_db()
         workflows = await gum_instance.recent_workflows(limit=args.limit)

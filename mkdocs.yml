@@ -55,6 +55,8 @@ plugins:
 
 nav:
   - Getting Started: index.md
+  - Research Protocols:
+    - 30-Minute Internal Pilot: internal-pilot-protocol.md
   - Tutorials:
     - Model Context Protocol: tutorials/mcp.md
     - A Proactive Assistant (GUMBO): tutorials/gumbo.md
