@@ -286,6 +286,33 @@ class Screen(Observer):
         )
         return path
 
+    @staticmethod
+    def _delete_screenshot(path: str) -> None:
+        """Best-effort removal for screenshot files."""
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            logging.getLogger("Screen").debug("Failed to delete screenshot %s", path, exc_info=True)
+
+    def _append_history(self, path: str) -> bool:
+        """Append a screenshot to history and delete any evicted screenshot."""
+        maxlen = self._history.maxlen or 0
+        if maxlen <= 0:
+            return False
+
+        evicted = self._history[0] if len(self._history) == maxlen else None
+        self._history.append(path)
+        if evicted is not None:
+            self._delete_screenshot(evicted)
+        return True
+
+    def _clear_history(self) -> None:
+        """Delete all screenshots still retained in history."""
+        while self._history:
+            self._delete_screenshot(self._history.popleft())
+
     async def _process_and_emit(self, before_path: str, after_path: str) -> None:
         """Process screenshots and emit an update.
         
@@ -294,24 +321,34 @@ class Screen(Observer):
             after_path (str | None): Path to the "after" screenshot, if any.
         """
         # chronology: append 'before' first (history order == real order)
-        self._history.append(before_path)
+        before_retained = self._append_history(before_path)
         prev_paths = list(self._history)
 
-        # async OpenAI calls
         try:
-            transcription = await self._call_gpt_vision(self.transcription_prompt, [before_path, after_path])
-        except Exception as exc:                                        # pragma: no cover
-            transcription = f"[transcription failed: {exc}]"
+            # async OpenAI calls
+            try:
+                transcription = await self._call_gpt_vision(self.transcription_prompt, [before_path, after_path])
+            except Exception as exc:                                        # pragma: no cover
+                transcription = f"[transcription failed: {exc}]"
 
-        prev_paths.append(before_path)
-        prev_paths.append(after_path)
-        try:
-            summary = await self._call_gpt_vision(self.summary_prompt, prev_paths)
-        except Exception as exc:                                    # pragma: no cover
-            summary = f"[summary failed: {exc}]"
+            prev_paths.append(before_path)
+            prev_paths.append(after_path)
+            try:
+                summary = await self._call_gpt_vision(self.summary_prompt, prev_paths)
+            except Exception as exc:                                    # pragma: no cover
+                summary = f"[summary failed: {exc}]"
 
-        txt = (transcription + summary).strip()
-        await self.update_queue.put(Update(content=txt, content_type="input_text"))
+            txt = (transcription + summary).strip()
+            await self.update_queue.put(Update(content=txt, content_type="input_text"))
+        finally:
+            self._delete_screenshot(after_path)
+            if not before_retained:
+                self._delete_screenshot(before_path)
+
+    async def stop(self) -> None:
+        """Stop the observer and remove retained history screenshots."""
+        await super().stop()
+        self._clear_history()
 
     # ─────────────────────────────── skip guard
     def _skip(self) -> bool:
