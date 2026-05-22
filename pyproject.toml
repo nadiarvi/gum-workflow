@@ -22,6 +22,8 @@ dependencies = [
     "scikit-learn",
     "aiosqlite",
     "greenlet",
+    "aiohttp",
+    "ics",
     "persist-queue",
     "mkdocs>=1.5.0",
     "mkdocs-material>=9.0.0",
