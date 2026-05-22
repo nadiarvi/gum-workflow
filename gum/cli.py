@@ -39,6 +39,11 @@ def parse_args():
     
     parser.add_argument('--limit', '-l', type=int, help='Limit the number of results', default=10)
     parser.add_argument('--model', '-m', type=str, help='Model to use')
+    parser.add_argument(
+        '--data-directory',
+        type=str,
+        help='Directory for GUM data. Defaults to GUM_DATA_DIR or ~/.cache/gum',
+    )
     parser.add_argument('--reset-cache', action='store_true', help='Reset the GUM cache and exit')  # Add this line
     
     # Batching configuration arguments
@@ -55,9 +60,11 @@ def parse_args():
 async def main():
     args = parse_args()
 
+    data_directory = os.path.expanduser(args.data_directory or os.getenv('GUM_DATA_DIR') or '~/.cache/gum')
+
     # Handle --reset-cache before anything else
     if getattr(args, 'reset_cache', False):
-        cache_dir = os.path.expanduser('~/.cache/gum/')
+        cache_dir = data_directory
         if os.path.exists(cache_dir):
             shutil.rmtree(cache_dir)
             print(f"Deleted cache directory: {cache_dir}")
@@ -78,7 +85,7 @@ async def main():
         return
     
     if getattr(args, 'workflows', False):
-        gum_instance = gum(user_name or os.getenv('USER_NAME') or 'default', model, enable_batcher=False)
+        gum_instance = gum(user_name or os.getenv('USER_NAME') or 'default', model, data_directory=data_directory, enable_batcher=False)
         await gum_instance.connect_db()
         workflows = await gum_instance.recent_workflows(limit=args.limit)
         print(f"\nRecent {len(workflows)} workflows:")
@@ -100,7 +107,7 @@ async def main():
             print(f"Created At: {w.created_at}")
             print("-" * 80)
     elif getattr(args, 'recent', False):
-        gum_instance = gum(user_name or os.getenv('USER_NAME') or 'default', model, enable_batcher=False)
+        gum_instance = gum(user_name or os.getenv('USER_NAME') or 'default', model, data_directory=data_directory, enable_batcher=False)
         await gum_instance.connect_db()
         props = await gum_instance.recent(limit=args.limit)
         print(f"\nRecent {len(props)} propositions:")
@@ -113,7 +120,7 @@ async def main():
             print(f"Created At: {p.created_at}")
             print("-" * 80)
     elif args.query is not None:
-        gum_instance = gum(user_name, model, enable_batcher=False)
+        gum_instance = gum(user_name, model, data_directory=data_directory, enable_batcher=False)
         await gum_instance.connect_db()
         result = await gum_instance.query(args.query, limit=args.limit)
         
@@ -129,11 +136,13 @@ async def main():
             print("-" * 80)
     else:
         print(f"Listening to {user_name} with model {model}")
+        screenshots_dir = os.path.join(data_directory, 'screenshots')
             
         async with gum(
             user_name, 
             model, 
-            Screen(model),
+            Screen(model, screenshots_dir=screenshots_dir),
+            data_directory=data_directory,
             min_batch_size=min_batch_size,
             max_batch_size=max_batch_size
         ) as gum_instance:
